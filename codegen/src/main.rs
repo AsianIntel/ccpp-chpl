@@ -6,7 +6,7 @@ use std::{
     error::Error,
     fs::{read_dir, File, OpenOptions},
     io::{BufRead, BufReader, Write},
-    path::Path,
+    path::Path, collections::HashMap,
 };
 
 use itertools::PeekingNext;
@@ -113,80 +113,28 @@ fn read_file(path: &Path, write_file: &mut File) -> Result<(), Box<dyn Error>> {
 
             loop {
                 let line = match iter.next() {
-                    Some(l) if !l.trim().is_empty() => l
+                    Some(l) if l.contains("[") && l.contains("]") => l
                         .trim_matches(|c: char| c.is_whitespace() || c == '[' || c == ']')
                         .to_string(),
                     _ => break,
                 };
-                let standard_name = match iter.next() {
-                    Some(standard_name) => {
-                        let parts = standard_name
-                            .split("=")
-                            .map(|s| s.trim())
-                            .collect::<Vec<_>>();
-                        parts[1].to_string()
+
+                let mut parts = HashMap::new();
+                loop {
+                    match iter.peeking_next(|s| s.contains("=")) {
+                        Some(l) => {
+                            let p = l
+                                .split("=")
+                                .map(|s| s.trim())
+                                .collect::<Vec<_>>();
+                            parts.insert(p[0], p[1]);
+                        },
+                        _ => break
                     }
-                    None => return Err("Missing standard_name in argument properties".into()),
-                };
-                let long_name = match iter.next() {
-                    Some(long_name) => {
-                        let parts = long_name.split("=").map(|s| s.trim()).collect::<Vec<_>>();
-                        parts[1].to_string()
-                    }
-                    None => return Err("Missing long_name in argument properties".into()),
-                };
-                let units = match iter.next() {
-                    Some(units) => {
-                        let parts = units.split("=").map(|s| s.trim()).collect::<Vec<_>>();
-                        parts[1].to_string()
-                    }
-                    None => return Err("Missing units in argument properties".into()),
-                };
-                let dimensions = match iter.next() {
-                    Some(dimensions) => {
-                        let parts = dimensions.split("=").map(|s| s.trim()).collect::<Vec<_>>();
-                        parts[1].to_string()
-                    }
-                    None => return Err("Missing dimensions in argument properties".into()),
-                };
-                let r#type = match iter.next() {
-                    Some(r#type) => {
-                        let parts = r#type.split("=").map(|s| s.trim()).collect::<Vec<_>>();
-                        parts[1].to_string()
-                    }
-                    None => return Err("Missing type in argument properties".into()),
-                };
-                let kind = match iter.peeking_next(|s| s.contains("kind =")) {
-                    Some(kind) => {
-                        let parts = kind.split("=").map(|s| s.trim()).collect::<Vec<_>>();
-                        Some(parts[1].to_string())
-                    }
-                    None => None,
-                };
-                let active = match iter.peeking_next(|s| s.contains("active")) {
-                    Some(kind) => {
-                        let parts = kind.split("=").map(|s| s.trim()).collect::<Vec<_>>();
-                        Some(parts[1].to_string())
-                    }
-                    None => None,
-                };
-                let intent = match iter.peeking_next(|s| s.contains("intent")) {
-                    Some(intent) => {
-                        let parts = intent.split("=").map(|s| s.trim()).collect::<Vec<_>>();
-                        Some(parts[1].to_string())
-                    }
-                    None => None,
-                };
-                let arg = Argument {
-                    standard_name,
-                    long_name,
-                    units,
-                    dimensions,
-                    r#type,
-                    kind,
-                    active,
-                    intent,
-                };
+                }
+
+                let arg = extract_args(parts)?;
+                
                 args.push((line, arg));
             }
             println!("{}", file_name);
@@ -205,6 +153,31 @@ fn read_file(path: &Path, write_file: &mut File) -> Result<(), Box<dyn Error>> {
     }
 
     Ok(())
+}
+
+fn extract_args(parts: HashMap<&str, &str>) -> Result<Argument, Box<dyn Error>> {
+    println!("{:?}", parts);
+    let standard_name = parts.get("standard_name").unwrap().to_string();
+    let long_name = parts.get("long_name").unwrap().to_string();
+    let units = parts.get("units").unwrap().to_string();
+    let dimensions = parts.get("dimensions").unwrap().to_string();
+    let r#type = parts.get("type").unwrap().to_string();
+    let kind = parts.get("kind").map(|s| s.to_string());
+    let active = parts.get("active").map(|s| s.to_string());
+    let intent = parts.get("intent").map(|s| s.to_string());
+
+    let arg = Argument {
+        standard_name,
+        long_name,
+        units,
+        dimensions,
+        r#type,
+        kind,
+        active,
+        intent,
+    };
+
+    Ok(arg)
 }
 
 fn write_function(function: Function, file: &mut File) -> Result<(), Box<dyn Error>> {
