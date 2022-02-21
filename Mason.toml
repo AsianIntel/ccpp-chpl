@@ -4,6 +4,6 @@ name = "ccpp"
 version = "0.0.1"
 chplVersion = "1.25.0"
 license = "MIT"
-compopts = "-L/usr/lib/gcc/x86_64-linux-gnu/9/ -L/home/asianintel/iiser/ccpp-chpl/build -lgfortran -lccpp"
+compopts = "-L/usr/lib/gcc/x86_64-linux-gnu/9/ -lgfortran -lccpp"
 
 [dependencies]
