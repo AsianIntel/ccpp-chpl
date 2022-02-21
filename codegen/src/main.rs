@@ -30,7 +30,7 @@ struct Argument {
     pub standard_name: String,
     pub long_name: String,
     pub units: String,
-    pub dimensions: String,
+    pub dimensions: Vec<String>,
     pub r#type: String,
     pub kind: Option<String>,
     pub active: Option<String>,
@@ -45,7 +45,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .write(true)
         .truncate(true)
         .open("../src/ccpp.chpl")?;
-    test_file.write_all(b"module ccpp {\n")?;
+    test_file.write_all(b"module ccpp {\nuse types;\nuse SysCTypes;\nuse SysBasic;\nuse CPtr;\n")?;
     for entry in paths {
         let path = entry.path();
         if let Some(extension) = path.extension() {
@@ -90,7 +90,6 @@ fn read_file(path: &Path, write_file: &mut File) -> Result<(), Box<dyn Error>> {
                 None => return Err("Missing type in table properties".into()),
             };
             let _deps = iter.next().unwrap();
-            println!("{}", name);
             module_name = Some(name);
         }
 
@@ -137,7 +136,7 @@ fn read_file(path: &Path, write_file: &mut File) -> Result<(), Box<dyn Error>> {
                 
                 args.push((line, arg));
             }
-            println!("{}", file_name);
+            println!("{}", name);
 
             let function = Function {
                 module: module_name.clone().unwrap(),
@@ -149,6 +148,7 @@ fn read_file(path: &Path, write_file: &mut File) -> Result<(), Box<dyn Error>> {
             if let Err(err) = write_function(function, write_file) {
                 println!("{}", err);
             }
+            print!("\n");
         }
     }
 
@@ -156,11 +156,14 @@ fn read_file(path: &Path, write_file: &mut File) -> Result<(), Box<dyn Error>> {
 }
 
 fn extract_args(parts: HashMap<&str, &str>) -> Result<Argument, Box<dyn Error>> {
-    println!("{:?}", parts);
     let standard_name = parts.get("standard_name").unwrap().to_string();
     let long_name = parts.get("long_name").unwrap().to_string();
     let units = parts.get("units").unwrap().to_string();
-    let dimensions = parts.get("dimensions").unwrap().to_string();
+    let dimensions = {
+        let dims = parts.get("dimensions").unwrap();
+        let dim_parts = dims.trim_matches(|c| c == '(' || c == ')');
+        dim_parts.split(",").filter(|s| !s.is_empty()).map(|s| s.to_string()).collect()
+    };
     let r#type = parts.get("type").unwrap().to_string();
     let kind = parts.get("kind").map(|s| s.to_string());
     let active = parts.get("active").map(|s| s.to_string());
@@ -188,9 +191,47 @@ fn write_function(function: Function, file: &mut File) -> Result<(), Box<dyn Err
 
     let mut args = Vec::new();
     for arg in function.args {
+        let dimensions = arg.1.dimensions;
+        let arg_type = match arg.1.r#type.as_str() {
+            "character" => "c_string",
+            "integer" => {
+                if dimensions.is_empty() {
+                    "int"
+                } else {
+                    "c_int"
+                }
+            },
+            "real" => {
+                if dimensions.is_empty() {
+                    "real"
+                } else {
+                    "c_double"
+                }
+            },
+            "logical" => "bool",
+            "topflw_type" => "topflw_type",
+            "sfcflw_type" => "sfcflw_type",
+            e => return Err(format!("Unknown type: {}", e).into()),
+        };
+        let actual_type = if dimensions.len() == 1 {
+            format!("c_ptr({})", arg_type)
+        } else if dimensions.len() == 2 {
+            format!("c_ptr(c_ptr({}))", arg_type)
+        } else if dimensions.len() == 3 {
+            format!("c_ptr(c_ptr(c_ptr({})))", arg_type)
+        } else {
+            arg_type.to_string()
+        };
+
         let mut arg_str = match arg.1.intent {
             Some(s) if s.eq("out") => "out ".to_string(),
-            _ => "ref ".to_string(),
+            _ => {
+                if actual_type.contains("c_ptr") {
+                    "".to_string()
+                } else {
+                    "ref ".to_string()
+                }
+            },
         };
         arg_str.push_str(match arg.0.as_str() {
             "var" => "_var",
@@ -198,19 +239,14 @@ fn write_function(function: Function, file: &mut File) -> Result<(), Box<dyn Err
             e => e 
         });
         arg_str.push_str(": ");
-        arg_str.push_str(match arg.1.r#type.as_str() {
-            "character" => "c_string",
-            "integer" => "int",
-            "real" => "real",
-            "logical" => "bool",
-            e => return Err(format!("Unknown type: {}", e).into()),
-        });
+
+        
+        arg_str.push_str(&actual_type);
         args.push(arg_str);
     };
 
     func_str.push_str(&args.join(", "));
     func_str.push_str(");\n");
-    println!("{}", func_str);
 
     file.write_all(&func_str.as_bytes())?;
     Ok(())

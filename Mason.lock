@@ -1,9 +1,9 @@
 
 [root]
 name = "ccpp"
-compopts = "-L/usr/lib/gcc/x86_64-linux-gnu/9/ -L/home/asianintel/iiser/ccpp/build -lgfortran -lccpp"
-version = "0.0.1"
-chplVersion = "1.25.0..1.25.0"
+chplVersion = "1.25.1..1.25.1"
+compopts = "-L/usr/lib/gcc/x86_64-linux-gnu/9/ -L/home/asianintel/iiser/ccpp-chpl/build -lgfortran -lccpp"
 license = "MIT"
+version = "0.0.1"
 
 
