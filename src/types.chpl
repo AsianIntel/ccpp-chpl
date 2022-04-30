@@ -1,4 +1,6 @@
 module types {
+    require "types.h";
+
     pragma "generate signature"
     extern record topflw_type {
         var upfxc: real;

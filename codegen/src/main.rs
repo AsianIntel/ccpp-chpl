@@ -44,8 +44,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut test_file = OpenOptions::new()
         .write(true)
         .truncate(true)
-        .open("../src/ccpp.chpl")?;
-    test_file.write_all(b"module ccpp {\nuse types;\nuse SysCTypes;\nuse SysBasic;\nuse CPtr;\n")?;
+        .open("../src/functions.chpl")?;
+    test_file.write_all(b"module functions {\nuse types;\nuse SysCTypes;\nuse SysBasic;\nuse CPtr;\n")?;
     for entry in paths {
         let path = entry.path();
         if let Some(extension) = path.extension() {
@@ -213,14 +213,10 @@ fn write_function(function: Function, file: &mut File) -> Result<(), Box<dyn Err
             "sfcflw_type" => "sfcflw_type",
             e => return Err(format!("Unknown type: {}", e).into()),
         };
-        let actual_type = if dimensions.len() == 1 {
-            format!("c_ptr({})", arg_type)
-        } else if dimensions.len() == 2 {
-            format!("c_ptr(c_ptr({}))", arg_type)
-        } else if dimensions.len() == 3 {
-            format!("c_ptr(c_ptr(c_ptr({})))", arg_type)
-        } else {
+        let actual_type = if dimensions.is_empty() {
             arg_type.to_string()
+        } else {
+            format!("c_ptr({})", arg_type)
         };
 
         let mut arg_str = match arg.1.intent {
